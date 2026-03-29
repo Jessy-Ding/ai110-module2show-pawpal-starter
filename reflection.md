@@ -5,6 +5,7 @@
 **a. Initial design**
 
 - Briefly describe your initial UML design.
+- What classes did you include, and what responsibilities did you assign to each?
 
 Answer: My initial UML design followed a simple model-service-UI structure so I could map directly from requirements to implementation. The goal was to keep data entities clean, isolate scheduling logic, and make the Streamlit page act as a thin interaction layer.
 
@@ -109,8 +110,6 @@ classDiagram
 	StreamlitApp_app_py --> PawPalController : sends input
 	StreamlitApp_app_py --> SchedulePlan : renders
 ```
-
-- What classes did you include, and what responsibilities did you assign to each?
 
 **b. Design changes**
 
