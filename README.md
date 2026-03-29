@@ -22,6 +22,16 @@ Your final app should:
 - Display the plan clearly (and ideally explain the reasoning)
 - Include tests for the most important scheduling behaviors
 
+## Smarter Scheduling
+
+Recent updates add lightweight intelligence to planning:
+
+- Time-aware sorting using HH:MM task start times.
+- Flexible filtering by pet name and completion status.
+- Recurring task rollover for daily and weekly tasks when completed.
+- Conflict detection for overlapping task windows (same pet or different pets).
+- Non-blocking conflict warnings so planning continues without crashing.
+
 ## Getting started
 
 ### Setup
