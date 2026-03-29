@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 
@@ -60,6 +61,8 @@ class Pet:
 class Task:
 	description: str
 	duration_minutes: int
+	time: Optional[str] = None
+	due_date: Optional[date] = None
 	frequency: str = "daily"
 	is_completed: bool = False
 	priority: str = "medium"
@@ -85,6 +88,7 @@ class Task:
 class PlanningConstraints:
 	available_minutes: int
 	day_start: str = "08:00"
+	day_name: str = "monday"
 
 
 @dataclass
@@ -109,12 +113,189 @@ class Scheduler:
 		"low": 1,
 	}
 
-	def retrieve_all_tasks(self, owner: Owner, include_completed: bool = False) -> List[Task]:
-		"""Fetch all tasks across an owner's pets."""
-		return owner.get_all_tasks(include_completed=include_completed)
+	@staticmethod
+	def _supports_auto_recurrence(frequency: str) -> bool:
+		"""Return whether a frequency should auto-generate a follow-up task.
 
-	def organize_tasks(self, tasks: List[Task]) -> List[Task]:
+		Supported recurring values include daily variants and weekly variants.
+		"""
+		normalized = frequency.strip().lower()
+		return normalized in {"daily", "everyday", "every day", "weekly"} or normalized.startswith("weekly:")
+
+	@staticmethod
+	def _recurrence_interval_days(frequency: str) -> int:
+		"""Map a frequency label to its recurrence interval in whole days."""
+		normalized = frequency.strip().lower()
+		if normalized in {"daily", "everyday", "every day"}:
+			return 1
+		if normalized == "weekly" or normalized.startswith("weekly:"):
+			return 7
+		return 0
+
+	def retrieve_all_tasks(
+		self,
+		owner: Owner,
+		include_completed: bool = False,
+		pet_name: Optional[str] = None,
+	) -> List[Task]:
+		"""Fetch all tasks across an owner's pets."""
+		tasks = owner.get_all_tasks(include_completed=include_completed)
+		if pet_name is None:
+			return tasks
+		pet_name_normalized = pet_name.strip().lower()
+		return [task for task in tasks if (task.pet_name or "").strip().lower() == pet_name_normalized]
+
+	def filter_tasks(
+		self,
+		tasks: List[Task],
+		pet_name: Optional[str] = None,
+		is_completed: Optional[bool] = None,
+	) -> List[Task]:
+		"""Filter tasks by pet and completion status."""
+		filtered = tasks
+		if pet_name is not None:
+			pet_name_normalized = pet_name.strip().lower()
+			filtered = [task for task in filtered if (task.pet_name or "").strip().lower() == pet_name_normalized]
+		if is_completed is not None:
+			filtered = [task for task in filtered if task.is_completed is is_completed]
+		return filtered
+
+	def filter_tasks_by_status_or_pet(
+		self,
+		tasks: List[Task],
+		is_completed: Optional[bool] = None,
+		pet_name: Optional[str] = None,
+	) -> List[Task]:
+		"""Filter tasks by completion status and/or pet name.
+
+		Use either argument independently, or pass both to apply both filters.
+		"""
+		return self.filter_tasks(tasks, pet_name=pet_name, is_completed=is_completed)
+
+	def complete_task_with_recurrence(self, pet: Pet, task: Task) -> Optional[Task]:
+		"""Complete a task and optionally create the next recurring instance.
+
+		Returns:
+			A new pending Task when frequency is recurring, otherwise None.
+
+		Notes:
+			- Already completed tasks are ignored and return None.
+			- The next due date is computed via timedelta from task.due_date,
+			  falling back to today's date when due_date is missing.
+		"""
+		if task.is_completed:
+			return None
+
+		task.mark_complete()
+		if not self._supports_auto_recurrence(task.frequency):
+			return None
+
+		interval_days = self._recurrence_interval_days(task.frequency)
+		base_due_date = task.due_date or date.today()
+		next_due_date = base_due_date + timedelta(days=interval_days)
+
+		next_task = Task(
+			description=task.description,
+			duration_minutes=task.duration_minutes,
+			time=task.time,
+			due_date=next_due_date,
+			frequency=task.frequency,
+			is_completed=False,
+			priority=task.priority,
+			task_type=task.task_type,
+			pet_name=task.pet_name or pet.name,
+			preferred_window=task.preferred_window,
+		)
+		pet.add_task(next_task)
+		return next_task
+
+	def sort_tasks_by_time(self, tasks: List[Task], reverse: bool = False) -> List[Task]:
+		"""Sort tasks by HH:MM time when present, then duration/priority/description."""
+		return sorted(
+			tasks,
+			key=lambda task: (
+				0 if task.time else 1,
+				tuple(map(int, task.time.split(":"))) if task.time else (99, 99),
+				task.duration_minutes,
+				-self.PRIORITY_SCORE.get(task.priority.lower(), 0),
+				task.description.lower(),
+			),
+			reverse=reverse,
+		)
+
+	@staticmethod
+	def _task_interval(task: Task) -> Optional[tuple[int, int]]:
+		"""Convert a scheduled task into a [start, end) minute interval.
+
+		Returns None when the task has no explicit HH:MM start time.
+		"""
+		if not task.time:
+			return None
+		hour_str, minute_str = task.time.split(":")
+		start = int(hour_str) * 60 + int(minute_str)
+		end = start + task.duration_minutes
+		return start, end
+
+	@staticmethod
+	def _intervals_overlap(first: tuple[int, int], second: tuple[int, int]) -> bool:
+		"""Return True when two half-open intervals [start, end) overlap."""
+		start_a, end_a = first
+		start_b, end_b = second
+		return start_a < end_b and start_b < end_a
+
+	def detect_task_time_conflicts(self, tasks: List[Task]) -> List[tuple[Task, Task]]:
+		"""Detect overlapping task windows across same-pet and cross-pet schedules.
+
+		Algorithm:
+			1. Precompute task intervals once.
+			2. Sort intervals by start time.
+			3. Sweep forward and early-break when later tasks cannot overlap.
+
+		Returns:
+			A list of (task_a, task_b) pairs that overlap in time.
+		"""
+		interval_records: List[tuple[int, int, Task]] = []
+		for task in tasks:
+			interval = self._task_interval(task)
+			if interval is None:
+				continue
+			start, end = interval
+			interval_records.append((start, end, task))
+
+		interval_records.sort(key=lambda record: record[0])
+
+		conflicts: List[tuple[Task, Task]] = []
+		for i, (start_a, end_a, task_a) in enumerate(interval_records):
+			for start_b, end_b, task_b in interval_records[i + 1 :]:
+				if start_b >= end_a:
+					break
+				if self._intervals_overlap((start_a, end_a), (start_b, end_b)):
+					conflicts.append((task_a, task_b))
+
+		return conflicts
+
+	def get_conflict_warnings(self, tasks: List[Task]) -> List[str]:
+		"""Build non-fatal, human-readable warning messages for schedule conflicts.
+
+		This method intentionally avoids raising exceptions so callers can show
+		warnings and continue planning.
+		"""
+		warnings: List[str] = []
+		for left, right in self.detect_task_time_conflicts(tasks):
+			left_pet = left.pet_name or "Unknown pet"
+			right_pet = right.pet_name or "Unknown pet"
+			left_time = left.time or "--:--"
+			right_time = right.time or "--:--"
+			warnings.append(
+				f"Conflict: '{left.description}' ({left_pet}, {left_time}) overlaps with "
+				f"'{right.description}' ({right_pet}, {right_time})."
+			)
+		return warnings
+
+	def organize_tasks(self, tasks: List[Task], sort_by_time: bool = False) -> List[Task]:
 		"""Sort tasks by priority, then duration, then description."""
+		if sort_by_time:
+			return self.sort_tasks_by_time(tasks)
 		return sorted(
 			tasks,
 			key=lambda task: (
@@ -129,11 +310,16 @@ class Scheduler:
 		owner: Owner,
 		available_minutes: int,
 		include_completed: bool = False,
+		pet_name: Optional[str] = None,
+		status: Optional[bool] = None,
+		sort_by_time: bool = True,
 	) -> List[Task]:
 		"""Select the best-fitting tasks for the available daily time budget."""
 		remaining = available_minutes
 		selected: List[Task] = []
-		for task in self.organize_tasks(self.retrieve_all_tasks(owner, include_completed=include_completed)):
+		tasks = self.retrieve_all_tasks(owner, include_completed=include_completed, pet_name=pet_name)
+		tasks = self.filter_tasks_by_status_or_pet(tasks, is_completed=status, pet_name=pet_name)
+		for task in self.organize_tasks(tasks, sort_by_time=sort_by_time):
 			if task.duration_minutes <= remaining:
 				selected.append(task)
 				remaining -= task.duration_minutes
@@ -141,6 +327,26 @@ class Scheduler:
 
 
 class SchedulerService(Scheduler):
+	WEEKDAY_LOOKUP = {
+		"mon": "monday",
+		"monday": "monday",
+		"tue": "tuesday",
+		"tues": "tuesday",
+		"tuesday": "tuesday",
+		"wed": "wednesday",
+		"wednesday": "wednesday",
+		"thu": "thursday",
+		"thur": "thursday",
+		"thurs": "thursday",
+		"thursday": "thursday",
+		"fri": "friday",
+		"friday": "friday",
+		"sat": "saturday",
+		"saturday": "saturday",
+		"sun": "sunday",
+		"sunday": "sunday",
+	}
+
 	@staticmethod
 	def _add_minutes(time_str: str, minutes: int) -> str:
 		"""Return HH:MM after adding minutes to a starting HH:MM time."""
@@ -151,6 +357,69 @@ class SchedulerService(Scheduler):
 		minute = total_minutes % 60
 		return f"{hour:02d}:{minute:02d}"
 
+	@staticmethod
+	def _to_minutes(time_str: str) -> int:
+		"""Convert HH:MM to minutes since midnight."""
+		hour_str, minute_str = time_str.split(":")
+		return int(hour_str) * 60 + int(minute_str)
+
+	@staticmethod
+	def _to_time_str(total_minutes: int) -> str:
+		"""Convert minutes since midnight to HH:MM."""
+		total_minutes %= 24 * 60
+		hour = total_minutes // 60
+		minute = total_minutes % 60
+		return f"{hour:02d}:{minute:02d}"
+
+	def _normalize_day_name(self, day_name: str) -> str:
+		"""Normalize day labels like Mon/monday to canonical lowercase names."""
+		return self.WEEKDAY_LOOKUP.get(day_name.strip().lower(), day_name.strip().lower())
+
+	def is_task_due_on_day(self, task: Task, day_name: str) -> bool:
+		"""Evaluate simple recurring frequencies against a target weekday."""
+		frequency = task.frequency.strip().lower()
+		normalized_day = self._normalize_day_name(day_name)
+
+		if frequency in {"", "daily", "everyday", "every day"}:
+			return True
+		if frequency == "once":
+			return not task.is_completed
+		if frequency in self.WEEKDAY_LOOKUP:
+			return self._normalize_day_name(frequency) == normalized_day
+		if frequency.startswith("weekly:"):
+			days = [self._normalize_day_name(part) for part in frequency.split(":", 1)[1].split(",") if part.strip()]
+			return normalized_day in days
+		if frequency == "weekly":
+			# Basic convention for weekly tasks: schedule on Monday unless a specific day is provided.
+			return normalized_day == "monday"
+		return True
+
+	@staticmethod
+	def _parse_preferred_window(window: str) -> Optional[tuple[int, int]]:
+		"""Parse preferred window strings in HH:MM-HH:MM format."""
+		if "-" not in window:
+			return None
+		start_raw, end_raw = window.split("-", 1)
+		start = SchedulerService._to_minutes(start_raw.strip())
+		end = SchedulerService._to_minutes(end_raw.strip())
+		if end < start:
+			return None
+		return start, end
+
+	@staticmethod
+	def _overlaps(start_a: int, end_a: int, start_b: int, end_b: int) -> bool:
+		"""Return True when intervals [start, end) overlap."""
+		return start_a < end_b and start_b < end_a
+
+	def detect_conflict(self, proposed_start: int, proposed_end: int, entries: List[ScheduleEntry]) -> bool:
+		"""Check if a proposed interval conflicts with any existing schedule entry."""
+		for entry in entries:
+			entry_start = self._to_minutes(entry.start_time)
+			entry_end = self._to_minutes(entry.end_time)
+			if self._overlaps(proposed_start, proposed_end, entry_start, entry_end):
+				return True
+		return False
+
 	def generate_plan(
 		self,
 		owner: Owner,
@@ -160,21 +429,42 @@ class SchedulerService(Scheduler):
 	) -> DailyPlan:
 		"""Build a time-ordered daily plan from candidate tasks and constraints."""
 		candidate_tasks = tasks if tasks else pet.get_pending_tasks()
-		ordered = self.organize_tasks(
-			[task for task in candidate_tasks if self.fits_constraints(task, constraints.available_minutes)]
-		)
+		due_tasks = [
+			task
+			for task in candidate_tasks
+			if not task.is_completed
+			and self.is_task_due_on_day(task, constraints.day_name)
+			and self.fits_constraints(task, constraints.available_minutes)
+		]
+		ordered = self.organize_tasks(due_tasks, sort_by_time=True)
 
 		remaining = constraints.available_minutes
-		current_time = constraints.day_start
+		current_time_minutes = self._to_minutes(constraints.day_start)
 		entries: List[ScheduleEntry] = []
 		skipped: List[Task] = []
+		selected_tasks: set[int] = set()
 
 		for task in ordered:
-			if task.is_completed:
-				continue
+			start_minutes = current_time_minutes
+			if task.preferred_window:
+				window = self._parse_preferred_window(task.preferred_window)
+				if window is None:
+					skipped.append(task)
+					continue
+				window_start, window_end = window
+				if start_minutes < window_start:
+					start_minutes = window_start
+				if start_minutes + task.duration_minutes > window_end:
+					skipped.append(task)
+					continue
+
+			end_minutes = start_minutes + task.duration_minutes
 			if task.duration_minutes <= remaining:
-				start_time = current_time
-				end_time = self._add_minutes(start_time, task.duration_minutes)
+				if self.detect_conflict(start_minutes, end_minutes, entries):
+					skipped.append(task)
+					continue
+				start_time = self._to_time_str(start_minutes)
+				end_time = self._to_time_str(end_minutes)
 				entries.append(
 					ScheduleEntry(
 						task=task,
@@ -183,13 +473,14 @@ class SchedulerService(Scheduler):
 						reason=f"Selected due to {task.priority} priority and time fit.",
 					)
 				)
-				current_time = end_time
+				selected_tasks.add(id(task))
+				current_time_minutes = end_minutes
 				remaining -= task.duration_minutes
 			else:
 				skipped.append(task)
 
 		for task in ordered:
-			if task not in [entry.task for entry in entries] and task not in skipped and not task.is_completed:
+			if id(task) not in selected_tasks and task not in skipped:
 				skipped.append(task)
 
 		used_minutes = constraints.available_minutes - remaining
@@ -228,6 +519,8 @@ class PawPalController:
 		return Task(
 			description=description,
 			duration_minutes=duration_minutes,
+			time=task_data.get("time"),
+			due_date=self._parse_due_date(task_data.get("due_date")),
 			frequency=str(task_data.get("frequency", "daily")),
 			is_completed=bool(task_data.get("is_completed", False)),
 			priority=str(task_data.get("priority", "medium")),
@@ -235,6 +528,23 @@ class PawPalController:
 			pet_name=task_data.get("pet_name"),
 			preferred_window=task_data.get("preferred_window"),
 		)
+
+	@staticmethod
+	def _parse_due_date(raw_due_date: Any) -> Optional[date]:
+		"""Parse due_date values from date objects or YYYY-MM-DD strings."""
+		if raw_due_date is None:
+			return None
+		if isinstance(raw_due_date, date):
+			return raw_due_date
+		if isinstance(raw_due_date, str):
+			cleaned = raw_due_date.strip()
+			if not cleaned:
+				return None
+			try:
+				return datetime.strptime(cleaned, "%Y-%m-%d").date()
+			except ValueError as exc:
+				raise ValueError("Task due_date must be in YYYY-MM-DD format.") from exc
+		raise ValueError("Task due_date must be a date or YYYY-MM-DD string.")
 
 	def build_plan(
 		self,
@@ -266,6 +576,7 @@ class PawPalController:
 		constraints = PlanningConstraints(
 			available_minutes=int(constraints_data.get("available_minutes", 60)),
 			day_start=str(constraints_data.get("day_start", "08:00")),
+			day_name=str(constraints_data.get("day_name", "monday")),
 		)
 
 		return self.scheduler.generate_plan(owner, pet, tasks, constraints)

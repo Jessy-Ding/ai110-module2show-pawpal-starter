@@ -167,6 +167,10 @@ Answer: Yes. After reviewing and implementing the skeleton, I made two targeted 
 - Describe one tradeoff your scheduler makes.
 - Why is that tradeoff reasonable for this scenario?
 
+Answer: One tradeoff my scheduler makes is using a lightweight conflict-handling strategy: it detects overlapping task windows and returns warning messages, but it does not automatically optimize or re-arrange the schedule to resolve every conflict. In other words, the system prioritizes clarity and stability over full automatic optimization.
+
+This is reasonable for the PawPal+ scenario because the owner still gets a usable plan quickly, plus clear warnings they can act on, without the app becoming overly complex or unpredictable. For a class project and early product version, this approach keeps the code maintainable while still preventing silent scheduling mistakes.
+
 ---
 
 ## 3. AI Collaboration
