@@ -87,6 +87,7 @@ if owner.pets:
     with st.form("add_task_form"):
         task_description = st.text_input("Task description", value="Morning walk")
         duration = st.number_input("Duration (minutes)", min_value=1, max_value=240, value=20)
+        task_time = st.text_input("Start time (optional HH:MM)", value="")
         priority = st.selectbox("Priority", ["low", "medium", "high"], index=2)
         task_frequency = st.text_input("Frequency", value="daily")
         task_type = st.text_input("Task type", value="general")
@@ -98,6 +99,7 @@ if owner.pets:
                 {
                     "description": task_description,
                     "duration_minutes": int(duration),
+                    "time": task_time.strip() or None,
                     "priority": priority,
                     "frequency": task_frequency,
                     "task_type": task_type,
@@ -110,17 +112,64 @@ if owner.pets:
             st.error(str(exc))
 
     if selected_pet is not None and selected_pet.tasks:
-        st.write(f"Tasks for {selected_pet.name}:")
+        status_filter_label = st.selectbox(
+            "Filter tasks by status",
+            ["All", "Pending only", "Completed only"],
+            key="task_status_filter",
+        )
+        status_filter_map = {
+            "All": None,
+            "Pending only": False,
+            "Completed only": True,
+        }
+        filtered_pet_tasks = controller.scheduler.filter_tasks_by_status_or_pet(
+            selected_pet.tasks,
+            is_completed=status_filter_map[status_filter_label],
+            pet_name=selected_pet.name,
+        )
+        sorted_pet_tasks = controller.scheduler.sort_tasks_by_time(filtered_pet_tasks)
+
+        pet_conflicts = controller.scheduler.detect_task_time_conflicts(sorted_pet_tasks)
+        pet_conflict_warnings = controller.scheduler.get_conflict_warnings(sorted_pet_tasks)
+
+        total_task_minutes = sum(task.duration_minutes for task in sorted_pet_tasks)
+        st.success(
+            f"Showing {len(sorted_pet_tasks)} task(s) for {selected_pet.name} "
+            f"({total_task_minutes} total minutes)."
+        )
+
+        if pet_conflict_warnings:
+            st.warning(
+                f"{len(pet_conflict_warnings)} scheduling conflict(s) found. "
+                "Planning still works, but this schedule has overlaps."
+            )
+            st.caption("Tip: change one start time or move a lower-priority task to a later slot.")
+            st.table(
+                [
+                    {
+                        "task_a": left.description,
+                        "pet_a": left.pet_name or "Unknown",
+                        "time_a": left.time or "--:--",
+                        "task_b": right.description,
+                        "pet_b": right.pet_name or "Unknown",
+                        "time_b": right.time or "--:--",
+                    }
+                    for left, right in pet_conflicts
+                ]
+            )
+
+        st.write(f"Tasks for {selected_pet.name} (sorted by time):")
         st.table(
             [
                 {
                     "description": task.description,
+                    "time": task.time or "--:--",
                     "duration_minutes": task.duration_minutes,
                     "priority": task.priority,
                     "frequency": task.frequency,
                     "is_completed": task.is_completed,
                 }
-                for task in selected_pet.tasks
+                for task in sorted_pet_tasks
             ]
         )
     else:
@@ -153,15 +202,47 @@ if st.button("Generate schedule"):
         if not today_tasks:
             st.info("No tasks fit within the available time.")
         else:
+            sorted_today_tasks = controller.scheduler.sort_tasks_by_time(today_tasks)
+            today_conflicts = controller.scheduler.detect_task_time_conflicts(sorted_today_tasks)
+            today_conflict_warnings = controller.scheduler.get_conflict_warnings(sorted_today_tasks)
+
+            planned_minutes = sum(task.duration_minutes for task in sorted_today_tasks)
+            remaining_minutes = int(available_minutes) - planned_minutes
+            st.success(
+                f"Planned {len(sorted_today_tasks)} task(s), {planned_minutes} minutes used, "
+                f"{remaining_minutes} minutes remaining."
+            )
+
+            if today_conflict_warnings:
+                st.warning(
+                    f"{len(today_conflict_warnings)} overlap warning(s) in today's plan. "
+                    "Planning still worked, but some tasks overlap."
+                )
+                st.caption("Tip: change one start time or move a lower-priority task to a later slot.")
+                st.table(
+                    [
+                        {
+                            "task_a": left.description,
+                            "pet_a": left.pet_name or "Unknown",
+                            "time_a": left.time or "--:--",
+                            "task_b": right.description,
+                            "pet_b": right.pet_name or "Unknown",
+                            "time_b": right.time or "--:--",
+                        }
+                        for left, right in today_conflicts
+                    ]
+                )
+
             st.write("Today's Schedule:")
             st.table(
                 [
                     {
                         "pet": task.pet_name,
+                        "time": task.time or "--:--",
                         "task": task.description,
                         "duration_minutes": task.duration_minutes,
                         "priority": task.priority,
                     }
-                    for task in today_tasks
+                    for task in sorted_today_tasks
                 ]
             )

@@ -1,0 +1,97 @@
+classDiagram
+    class Owner {
+        +name: str
+        +preferences: Dict[str, Any]
+        +pets: List[Pet]
+        +add_pet(pet: Pet) None
+        +get_pet(pet_name: str) Optional[Pet]
+        +get_all_tasks(include_completed: bool) List[Task]
+    }
+
+    class Pet {
+        +name: str
+        +species: str
+        +notes: str
+        +tasks: List[Task]
+        +add_task(task: Task) None
+        +get_pending_tasks() List[Task]
+        +remove_task(description: str) bool
+    }
+
+    class Task {
+        +description: str
+        +duration_minutes: int
+        +time: Optional[str]
+        +due_date: Optional[date]
+        +frequency: str
+        +is_completed: bool
+        +priority: str
+        +task_type: str
+        +pet_name: Optional[str]
+        +preferred_window: Optional[str]
+        +title: str
+        +mark_complete() None
+        +mark_incomplete() None
+    }
+
+    class PlanningConstraints {
+        +available_minutes: int
+        +day_start: str
+        +day_name: str
+    }
+
+    class ScheduleEntry {
+        +task: Task
+        +start_time: str
+        +end_time: str
+        +reason: str
+    }
+
+    class DailyPlan {
+        +entries: List[ScheduleEntry]
+        +used_minutes: int
+        +skipped_tasks: List[Task]
+    }
+
+    class Scheduler {
+        +PRIORITY_SCORE: Dict
+        +retrieve_all_tasks(owner: Owner, include_completed: bool, pet_name: Optional[str]) List[Task]
+        +filter_tasks(tasks: List[Task], pet_name: Optional[str], is_completed: Optional[bool]) List[Task]
+        +filter_tasks_by_status_or_pet(tasks: List[Task], is_completed: Optional[bool], pet_name: Optional[str]) List[Task]
+        +complete_task_with_recurrence(pet: Pet, task: Task) Optional[Task]
+        +sort_tasks_by_time(tasks: List[Task], reverse: bool) List[Task]
+        +detect_task_time_conflicts(tasks: List[Task]) List[tuple[Task, Task]]
+        +get_conflict_warnings(tasks: List[Task]) List[str]
+        +organize_tasks(tasks: List[Task], sort_by_time: bool) List[Task]
+        +plan_tasks_for_day(owner: Owner, available_minutes: int, include_completed: bool, pet_name: Optional[str], status: Optional[bool], sort_by_time: bool) List[Task]
+    }
+
+    class SchedulerService {
+        +WEEKDAY_LOOKUP: Dict
+        +is_task_due_on_day(task: Task, day_name: str) bool
+        +detect_conflict(proposed_start: int, proposed_end: int, entries: List[ScheduleEntry]) bool
+        +generate_plan(owner: Owner, pet: Pet, tasks: List[Task], constraints: PlanningConstraints) DailyPlan
+        +score_task(task: Task, owner: Owner, pet: Pet) int
+        +fits_constraints(task: Task, remaining_minutes: int) bool
+    }
+
+    class PawPalController {
+        +scheduler: SchedulerService
+        +add_task(task_data: Dict[str, Any]) Task
+        +build_plan(owner_data: Dict[str, Any], pet_data: Dict[str, Any], tasks_data: List[Dict[str, Any]], constraints_data: Dict[str, Any]) DailyPlan
+    }
+
+    Owner "1" --> "0..*" Pet : owns
+    Pet "1" --> "0..*" Task : has
+    SchedulerService --|> Scheduler : extends
+    Scheduler ..> Owner : retrieves
+    Scheduler ..> Pet : reads
+    Scheduler ..> Task : filters/sorts
+    SchedulerService ..> PlanningConstraints : applies
+    SchedulerService --> DailyPlan : produces
+    DailyPlan *-- "0..*" ScheduleEntry : contains
+    ScheduleEntry --> Task : schedules
+    PawPalController --> SchedulerService : calls
+    PawPalController ..> Owner : constructs
+    PawPalController ..> Pet : constructs
+    PawPalController ..> Task : constructs
