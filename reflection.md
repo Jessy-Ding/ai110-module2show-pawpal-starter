@@ -17,7 +17,7 @@ I used these classes and responsibilities:
 2. `Pet`
 - Stores pet profile used by scheduling logic.
 
-3. `CareTask`
+3. `Task`
 - Represents each care activity (title, type, duration, priority, optional preferred window).
 
 4. `PlanningConstraints`
@@ -53,12 +53,12 @@ classDiagram
         +notes: str
     }
 
-    class CareTask {
+    class Task {
         +title: str
         +task_type: str
         +duration_minutes: int
         +priority: str
-        +preferred_window: str
+        +preferred_window: Optional[str]
     }
 
     class PlanningConstraints {
@@ -85,8 +85,8 @@ classDiagram
     }
 
     class PawPalController {
-        +add_task(task_data): CareTask
-        +build_plan(owner_data, pet_data, tasks, constraints_data): DailyPlan
+        +add_task(task_data): Task
+        +build_plan(owner_data, pet_data, tasks_data, constraints_data): DailyPlan
     }
 
     class StreamlitApp_app_py {
@@ -98,14 +98,14 @@ classDiagram
     }
 
     Owner "1" --> "1..*" Pet : owns
-    Pet "1" --> "0..*" CareTask : requires
+    Pet "1" --> "0..*" Task : requires
     SchedulerService ..> Owner : reads preferences
     SchedulerService ..> Pet : reads profile
-    SchedulerService ..> CareTask : evaluates
+    SchedulerService ..> Task : evaluates
     SchedulerService ..> PlanningConstraints : applies
     SchedulerService --> DailyPlan : produces
     DailyPlan *-- "1..*" ScheduleEntry : contains
-    ScheduleEntry --> CareTask : schedules
+    ScheduleEntry --> Task : schedules
     PawPalController --> SchedulerService : calls
     StreamlitApp_app_py --> PawPalController : sends input
     StreamlitApp_app_py --> DailyPlan : renders output
