@@ -5,6 +5,109 @@
 **a. Initial design**
 
 - Briefly describe your initial UML design.
+
+Answer: My initial UML design followed a simple model-service-UI structure so I could map directly from requirements to implementation. The goal was to keep data entities clean, isolate scheduling logic, and make the Streamlit page act as a thin interaction layer.
+
+I split responsibilities across these core classes:
+
+1. `Owner`
+- Stores owner profile and planning preferences (for example available time and preferred task types).
+
+2. `Pet`
+- Stores pet identity and care-related context (name, species, notes).
+
+3. `Task`
+- Represents one care activity with fields like title/type, duration, priority, optional time window, and completion state.
+
+4. `ScheduleItem`
+- Represents a scheduled result (task + start/end time + explanation for why it was selected).
+
+5. `SchedulePlan`
+- Holds the final daily plan as an ordered list of `ScheduleItem` objects and summary metadata (used time, skipped tasks).
+
+6. `Scheduler`
+- Core decision engine. Selects and orders tasks using constraints (time budget, priority, preferences, and optional time windows).
+
+7. `PawPalController`
+- Application coordinator between UI and model/service classes. Receives user inputs, constructs model objects, calls `Scheduler`, and returns a display-ready plan.
+
+8. `StreamlitView` (represented by `app.py`)
+- Collects inputs and renders results, while keeping business logic outside the UI layer.
+
+Initial UML (draft):
+
+```mermaid
+classDiagram
+	class Owner {
+		+name: str
+		+preferences: dict
+		+available_minutes: int
+	}
+
+	class Pet {
+		+name: str
+		+species: str
+		+care_notes: str
+	}
+
+	class Task {
+		+title: str
+		+category: str
+		+duration_minutes: int
+		+priority: str
+		+time_window: str
+		+is_completed: bool
+	}
+
+	class ScheduleItem {
+		+start_time: str
+		+end_time: str
+		+reason: str
+	}
+
+	class SchedulePlan {
+		+date: str
+		+items: list
+		+used_minutes: int
+		+skipped_tasks: list
+	}
+
+	class Scheduler {
+		+generate_plan(owner, pet, tasks): SchedulePlan
+		+score_task(task, owner, pet): int
+		+fits_constraints(task, remaining_minutes): bool
+	}
+
+	class PawPalController {
+		+create_owner(data): Owner
+		+create_pet(data): Pet
+		+add_task(data): Task
+		+build_schedule(owner, pet, tasks): SchedulePlan
+	}
+
+	class StreamlitView {
+		+collect_inputs()
+		+show_tasks(tasks)
+		+show_schedule(plan)
+	}
+
+	Owner "1" --> "1..*" Pet : owns
+	Owner "1" --> "0..*" Task : requests
+	Pet "1" --> "0..*" Task : needs
+	Scheduler ..> Task : ranks/selects
+	Scheduler ..> Owner : uses preferences
+	Scheduler ..> Pet : uses care context
+	Scheduler --> SchedulePlan : produces
+	SchedulePlan *-- "1..*" ScheduleItem : contains
+	ScheduleItem --> Task : schedules
+	PawPalController --> Scheduler : calls
+	PawPalController --> Owner : creates/updates
+	PawPalController --> Pet : creates/updates
+	PawPalController --> Task : creates/updates
+	StreamlitView --> PawPalController : sends input
+	StreamlitView --> SchedulePlan : renders
+```
+
 - What classes did you include, and what responsibilities did you assign to each?
 
 **b. Design changes**
