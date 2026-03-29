@@ -18,7 +18,7 @@ I used these classes and responsibilities:
 - Stores pet profile used by scheduling logic.
 
 3. `Task`
-- Represents each care activity (title, type, duration, priority, optional preferred window).
+- Represents each care activity (title, type, duration, priority, linked pet, optional preferred window).
 
 4. `PlanningConstraints`
 - Captures daily limits and user choices (available minutes and optional start time).
@@ -58,6 +58,7 @@ classDiagram
         +task_type: str
         +duration_minutes: int
         +priority: str
+        +pet_name: Optional[str]
         +preferred_window: Optional[str]
     }
 
@@ -115,6 +116,16 @@ classDiagram
 
 - Did your design change during implementation?
 - If yes, describe at least one change and why you made it.
+
+Answer: Yes. After reviewing the skeleton, I made two targeted design changes.
+
+1. Added an explicit Task-to-Pet link
+- Change: I added `pet_name: Optional[str]` to `Task`.
+- Why: The earlier model had an implied relationship (`Pet` requires tasks), but each task object did not explicitly store which pet it belonged to. This could become a bottleneck if the app later supports multiple pets, because scheduling would not be able to unambiguously assign tasks.
+
+2. Replaced `pass` stubs with `NotImplementedError`
+- Change: In `SchedulerService` and `PawPalController`, stub methods now raise `NotImplementedError`.
+- Why: This keeps the code as a skeleton while making unfinished logic explicit and preventing misleading return-type issues from silent `pass` statements. It also improves debugging clarity during implementation.
 
 ---
 

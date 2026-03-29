@@ -21,6 +21,7 @@ class Task:
 	task_type: str
 	duration_minutes: int
 	priority: str
+	pet_name: Optional[str] = None
 	preferred_window: Optional[str] = None
 
 
@@ -53,13 +54,13 @@ class SchedulerService:
 		tasks: List[Task],
 		constraints: PlanningConstraints,
 	) -> DailyPlan:
-		pass
+		raise NotImplementedError("Implement scheduling logic in generate_plan")
 
 	def score_task(self, task: Task, owner: Owner, pet: Pet) -> int:
-		pass
+		raise NotImplementedError("Implement task scoring in score_task")
 
 	def fits_constraints(self, task: Task, remaining_minutes: int) -> bool:
-		pass
+		raise NotImplementedError("Implement constraint checks in fits_constraints")
 
 
 class PawPalController:
@@ -67,7 +68,7 @@ class PawPalController:
 		self.scheduler = scheduler or SchedulerService()
 
 	def add_task(self, task_data: Dict[str, Any]) -> Task:
-		pass
+		raise NotImplementedError("Implement task creation/validation in add_task")
 
 	def build_plan(
 		self,
@@ -76,5 +77,5 @@ class PawPalController:
 		tasks_data: List[Dict[str, Any]],
 		constraints_data: Dict[str, Any],
 	) -> DailyPlan:
-		pass
+		raise NotImplementedError("Implement orchestration in build_plan")
 
