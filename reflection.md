@@ -12,13 +12,13 @@ Answer: For this phase, I designed a requirement-first UML that a teacher can qu
 I used these classes and responsibilities:
 
 1. `Owner`
-- Stores owner identity and planning preferences.
+- Stores owner identity/preferences and manages multiple pets.
 
 2. `Pet`
-- Stores pet profile used by scheduling logic.
+- Stores pet profile and a list of care tasks.
 
 3. `Task`
-- Represents each care activity (title, type, duration, priority, linked pet, optional preferred window).
+- Represents each care activity (description, duration, frequency, completion status, priority, type, linked pet, optional preferred window).
 
 4. `PlanningConstraints`
 - Captures daily limits and user choices (available minutes and optional start time).
@@ -32,10 +32,13 @@ I used these classes and responsibilities:
 7. `SchedulerService`
 - Core algorithm unit that filters tasks by constraints, ranks by priority, and builds `DailyPlan`.
 
-8. `PawPalController`
+8. `Scheduler`
+- Shared scheduling "brain" that retrieves and organizes tasks across all of an owner's pets.
+
+9. `PawPalController`
 - Orchestrates app flow: validates UI input, builds domain objects, calls scheduler, returns output.
 
-9. `StreamlitApp_app_py`
+10. `StreamlitApp_app_py`
 - The actual UI boundary in `app.py`: collects form inputs, triggers controller actions, displays tasks and plan.
 
 Initial UML (phase-appropriate draft):
@@ -45,21 +48,33 @@ classDiagram
     class Owner {
         +name: str
         +preferences: dict
+        +pets: list
+        +add_pet(pet)
+        +get_pet(pet_name)
+        +get_all_tasks(include_completed)
     }
 
     class Pet {
         +name: str
         +species: str
         +notes: str
+        +tasks: list
+        +add_task(task)
+        +get_pending_tasks()
+        +remove_task(description)
     }
 
     class Task {
-        +title: str
-        +task_type: str
+        +description: str
         +duration_minutes: int
+        +frequency: str
+        +is_completed: bool
         +priority: str
+        +task_type: str
         +pet_name: Optional[str]
         +preferred_window: Optional[str]
+        +mark_complete()
+        +mark_incomplete()
     }
 
     class PlanningConstraints {
@@ -80,9 +95,17 @@ classDiagram
     }
 
     class SchedulerService {
+        +_add_minutes(time_str, minutes): str
         +generate_plan(owner, pet, tasks, constraints): DailyPlan
         +score_task(task, owner, pet): int
         +fits_constraints(task, remaining_minutes): bool
+    }
+
+    class Scheduler {
+        +PRIORITY_SCORE: dict
+        +retrieve_all_tasks(owner, include_completed): list
+        +organize_tasks(tasks): list
+        +plan_tasks_for_day(owner, available_minutes, include_completed): list
     }
 
     class PawPalController {
@@ -100,6 +123,9 @@ classDiagram
 
     Owner "1" --> "1..*" Pet : owns
     Pet "1" --> "0..*" Task : requires
+    SchedulerService --|> Scheduler : extends
+    Scheduler ..> Owner : retrieves tasks
+    Scheduler ..> Task : orders by priority
     SchedulerService ..> Owner : reads preferences
     SchedulerService ..> Pet : reads profile
     SchedulerService ..> Task : evaluates
@@ -117,15 +143,15 @@ classDiagram
 - Did your design change during implementation?
 - If yes, describe at least one change and why you made it.
 
-Answer: Yes. After reviewing the skeleton, I made two targeted design changes.
+Answer: Yes. After reviewing and implementing the skeleton, I made two targeted design changes.
 
 1. Added an explicit Task-to-Pet link
 - Change: I added `pet_name: Optional[str]` to `Task`.
 - Why: The earlier model had an implied relationship (`Pet` requires tasks), but each task object did not explicitly store which pet it belonged to. This could become a bottleneck if the app later supports multiple pets, because scheduling would not be able to unambiguously assign tasks.
 
-2. Replaced `pass` stubs with `NotImplementedError`
-- Change: In `SchedulerService` and `PawPalController`, stub methods now raise `NotImplementedError`.
-- Why: This keeps the code as a skeleton while making unfinished logic explicit and preventing misleading return-type issues from silent `pass` statements. It also improves debugging clarity during implementation.
+2. Split scheduling responsibility into `Scheduler` + `SchedulerService`
+- Change: I introduced a base `Scheduler` class for cross-pet retrieval and organization (`retrieve_all_tasks`, `organize_tasks`, `plan_tasks_for_day`) and kept `SchedulerService` for concrete plan generation (`generate_plan`, `score_task`, `fits_constraints`).
+- Why: This reduced logic bottlenecks by separating generic scheduling behavior from app-specific plan building. It also improved maintainability and made the owner-pet-task traversal explicit.
 
 ---
 
