@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+from pathlib import Path
 
 from pawpal_system import Owner, Pet, PlanningConstraints, Scheduler, SchedulerService, Task
 
@@ -31,7 +32,7 @@ def test_sort_tasks_by_time_orders_shortest_first() -> None:
 
 	ordered = scheduler.sort_tasks_by_time(tasks)
 
-	assert [task.description for task in ordered] == ["Quick feed", "Brush coat", "Long walk"]
+	assert [task.description for task in ordered] == ["Long walk", "Quick feed", "Brush coat"]
 
 
 def test_sort_tasks_by_hhmm_time_attribute() -> None:
@@ -50,14 +51,66 @@ def test_sort_tasks_by_hhmm_time_attribute() -> None:
 def test_sort_tasks_by_time_places_untimed_after_timed() -> None:
 	scheduler = Scheduler()
 	tasks = [
-		Task(description="Untimed chore", duration_minutes=5),
+		Task(description="Untimed chore", duration_minutes=5, priority="high"),
 		Task(description="Morning feed", duration_minutes=15, time="07:30"),
 		Task(description="Midday walk", duration_minutes=20, time="12:00"),
 	]
 
 	ordered = scheduler.sort_tasks_by_time(tasks)
 
-	assert [task.description for task in ordered] == ["Morning feed", "Midday walk", "Untimed chore"]
+	assert [task.description for task in ordered] == ["Untimed chore", "Morning feed", "Midday walk"]
+
+
+def test_sort_tasks_priority_first_then_time() -> None:
+	scheduler = Scheduler()
+	tasks = [
+		Task(description="Medium early", duration_minutes=10, time="08:00", priority="medium"),
+		Task(description="High later", duration_minutes=10, time="09:00", priority="high"),
+	]
+
+	ordered = scheduler.sort_tasks_by_time(tasks)
+
+	assert [task.description for task in ordered] == ["High later", "Medium early"]
+
+
+def test_find_next_available_slot_returns_first_gap() -> None:
+	scheduler = Scheduler()
+	tasks = [
+		Task(description="Task A", duration_minutes=30, time="08:00"),
+		Task(description="Task B", duration_minutes=30, time="09:00"),
+	]
+
+	next_slot = scheduler.find_next_available_slot(tasks, duration_minutes=20, day_start="08:00", day_end="12:00")
+
+	assert next_slot == "08:30"
+
+
+def test_owner_save_and_load_json_round_trip(tmp_path: Path) -> None:
+	owner = Owner(name="Jordan", preferences={"preferred_task_types": ["walk"]})
+	pet = Pet(name="Mochi", species="dog", notes="Energetic")
+	task = Task(
+		description="Morning walk",
+		duration_minutes=20,
+		time="08:00",
+		due_date=date(2026, 3, 29),
+		frequency="daily",
+		priority="high",
+		task_type="walk",
+		pet_name="Mochi",
+	)
+	pet.add_task(task)
+	owner.add_pet(pet)
+
+	file_path = tmp_path / "data.json"
+	owner.save_to_json(str(file_path))
+	loaded = Owner.load_from_json(str(file_path))
+
+	assert loaded.name == "Jordan"
+	assert loaded.preferences["preferred_task_types"] == ["walk"]
+	assert len(loaded.pets) == 1
+	assert loaded.pets[0].name == "Mochi"
+	assert len(loaded.pets[0].tasks) == 1
+	assert loaded.pets[0].tasks[0].due_date == date(2026, 3, 29)
 
 
 def test_filter_tasks_by_pet_and_status() -> None:

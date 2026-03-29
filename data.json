@@ -1,0 +1,104 @@
+{
+  "name": "Jessy",
+  "preferences": {},
+  "pets": [
+    {
+      "name": "Pomelo",
+      "species": "dog",
+      "notes": "",
+      "tasks": [
+        {
+          "description": "Morning walk",
+          "duration_minutes": 20,
+          "time": "07:00",
+          "due_date": null,
+          "frequency": "daily",
+          "is_completed": false,
+          "priority": "high",
+          "task_type": "general",
+          "pet_name": "Pomelo",
+          "preferred_window": null
+        },
+        {
+          "description": "Evening walk",
+          "duration_minutes": 20,
+          "time": "19:00",
+          "due_date": null,
+          "frequency": "daily",
+          "is_completed": false,
+          "priority": "high",
+          "task_type": "general",
+          "pet_name": "Pomelo",
+          "preferred_window": null
+        },
+        {
+          "description": "Feed",
+          "duration_minutes": 15,
+          "time": "08:00",
+          "due_date": null,
+          "frequency": "daily",
+          "is_completed": false,
+          "priority": "high",
+          "task_type": "general",
+          "pet_name": "Pomelo",
+          "preferred_window": null
+        },
+        {
+          "description": "Play",
+          "duration_minutes": 10,
+          "time": "07:30",
+          "due_date": null,
+          "frequency": "daily",
+          "is_completed": false,
+          "priority": "medium",
+          "task_type": "general",
+          "pet_name": "Pomelo",
+          "preferred_window": null
+        }
+      ]
+    },
+    {
+      "name": "Cici",
+      "species": "cat",
+      "notes": "",
+      "tasks": [
+        {
+          "description": "Clean",
+          "duration_minutes": 10,
+          "time": "07:30",
+          "due_date": null,
+          "frequency": "daily",
+          "is_completed": false,
+          "priority": "high",
+          "task_type": "general",
+          "pet_name": "Cici",
+          "preferred_window": null
+        },
+        {
+          "description": "Play",
+          "duration_minutes": 15,
+          "time": "20:00",
+          "due_date": null,
+          "frequency": "daily",
+          "is_completed": false,
+          "priority": "low",
+          "task_type": "general",
+          "pet_name": "Cici",
+          "preferred_window": null
+        },
+        {
+          "description": "Feed",
+          "duration_minutes": 10,
+          "time": "07:30",
+          "due_date": null,
+          "frequency": "daily",
+          "is_completed": false,
+          "priority": "high",
+          "task_type": "general",
+          "pet_name": "Cici",
+          "preferred_window": null
+        }
+      ]
+    }
+  ]
+}

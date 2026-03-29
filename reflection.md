@@ -200,6 +200,8 @@ classDiagram
         +add_pet(pet: Pet) None
         +get_pet(pet_name: str) Optional[Pet]
         +get_all_tasks(include_completed: bool) List[Task]
+        +save_to_json(file_path: str) None
+        +load_from_json(file_path: str) Owner
     }
 
     class Pet {
@@ -254,6 +256,7 @@ classDiagram
         +filter_tasks_by_status_or_pet(tasks: List[Task], is_completed: Optional[bool], pet_name: Optional[str]) List[Task]
         +complete_task_with_recurrence(pet: Pet, task: Task) Optional[Task]
         +sort_tasks_by_time(tasks: List[Task], reverse: bool) List[Task]
+        +find_next_available_slot(tasks: List[Task], duration_minutes: int, day_start: str, day_end: str) Optional[str]
         +detect_task_time_conflicts(tasks: List[Task]) List[tuple[Task, Task]]
         +get_conflict_warnings(tasks: List[Task]) List[str]
         +organize_tasks(tasks: List[Task], sort_by_time: bool) List[Task]

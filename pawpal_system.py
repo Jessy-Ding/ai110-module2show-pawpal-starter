@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
+import json
 from typing import Any, Dict, List, Optional
 
 
@@ -29,6 +30,76 @@ class Owner:
 			else:
 				all_tasks.extend(pet.get_pending_tasks())
 		return all_tasks
+
+	def save_to_json(self, file_path: str = "data.json") -> None:
+		"""Persist owner, pets, and tasks to JSON for cross-run restoration."""
+		payload = {
+			"name": self.name,
+			"preferences": self.preferences,
+			"pets": [
+				{
+					"name": pet.name,
+					"species": pet.species,
+					"notes": pet.notes,
+					"tasks": [
+						{
+							"description": task.description,
+							"duration_minutes": task.duration_minutes,
+							"time": task.time,
+							"due_date": task.due_date.isoformat() if task.due_date else None,
+							"frequency": task.frequency,
+							"is_completed": task.is_completed,
+							"priority": task.priority,
+							"task_type": task.task_type,
+							"pet_name": task.pet_name,
+							"preferred_window": task.preferred_window,
+						}
+						for task in pet.tasks
+					],
+				}
+				for pet in self.pets
+			],
+		}
+
+		with open(file_path, "w", encoding="utf-8") as handle:
+			json.dump(payload, handle, ensure_ascii=True, indent=2)
+
+	@classmethod
+	def load_from_json(cls, file_path: str = "data.json") -> "Owner":
+		"""Restore an Owner hierarchy from a JSON file."""
+		with open(file_path, "r", encoding="utf-8") as handle:
+			payload = json.load(handle)
+
+		owner = cls(
+			name=str(payload.get("name", "Owner")),
+			preferences=dict(payload.get("preferences", {})),
+		)
+
+		for pet_data in payload.get("pets", []):
+			pet = Pet(
+				name=str(pet_data.get("name", "Pet")),
+				species=str(pet_data.get("species", "other")),
+				notes=str(pet_data.get("notes", "")),
+			)
+			for task_data in pet_data.get("tasks", []):
+				raw_due_date = task_data.get("due_date")
+				due_date_value = date.fromisoformat(raw_due_date) if raw_due_date else None
+				task = Task(
+					description=str(task_data.get("description", "")),
+					duration_minutes=int(task_data.get("duration_minutes", 0)),
+					time=task_data.get("time"),
+					due_date=due_date_value,
+					frequency=str(task_data.get("frequency", "daily")),
+					is_completed=bool(task_data.get("is_completed", False)),
+					priority=str(task_data.get("priority", "medium")),
+					task_type=str(task_data.get("task_type", "general")),
+					pet_name=task_data.get("pet_name"),
+					preferred_window=task_data.get("preferred_window"),
+				)
+				pet.add_task(task)
+			owner.add_pet(pet)
+
+		return owner
 
 
 @dataclass
@@ -210,18 +281,62 @@ class Scheduler:
 		return next_task
 
 	def sort_tasks_by_time(self, tasks: List[Task], reverse: bool = False) -> List[Task]:
-		"""Sort tasks by HH:MM time when present, then duration/priority/description."""
+		"""Sort tasks by priority first, then HH:MM time, then duration/description."""
 		return sorted(
 			tasks,
 			key=lambda task: (
+				-self.PRIORITY_SCORE.get(task.priority.lower(), 0),
 				0 if task.time else 1,
 				tuple(map(int, task.time.split(":"))) if task.time else (99, 99),
 				task.duration_minutes,
-				-self.PRIORITY_SCORE.get(task.priority.lower(), 0),
 				task.description.lower(),
 			),
 			reverse=reverse,
 		)
+
+	def find_next_available_slot(
+		self,
+		tasks: List[Task],
+		duration_minutes: int,
+		day_start: str = "08:00",
+		day_end: str = "22:00",
+	) -> Optional[str]:
+		"""Return next HH:MM slot that can fit duration within [day_start, day_end)."""
+		day_start_minutes = SchedulerService._to_minutes(day_start)
+		day_end_minutes = SchedulerService._to_minutes(day_end)
+		if duration_minutes <= 0 or day_start_minutes >= day_end_minutes:
+			return None
+
+		intervals: List[tuple[int, int]] = []
+		for task in tasks:
+			interval = self._task_interval(task)
+			if interval is None:
+				continue
+			start, end = interval
+			if end <= day_start_minutes or start >= day_end_minutes:
+				continue
+			intervals.append((max(start, day_start_minutes), min(end, day_end_minutes)))
+
+		if not intervals:
+			return SchedulerService._to_time_str(day_start_minutes) if day_start_minutes + duration_minutes <= day_end_minutes else None
+
+		intervals.sort(key=lambda item: item[0])
+		merged: List[tuple[int, int]] = []
+		for start, end in intervals:
+			if not merged or start > merged[-1][1]:
+				merged.append((start, end))
+			else:
+				merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+
+		cursor = day_start_minutes
+		for start, end in merged:
+			if cursor + duration_minutes <= start:
+				return SchedulerService._to_time_str(cursor)
+			cursor = max(cursor, end)
+
+		if cursor + duration_minutes <= day_end_minutes:
+			return SchedulerService._to_time_str(cursor)
+		return None
 
 	@staticmethod
 	def _task_interval(task: Task) -> Optional[tuple[int, int]]:
