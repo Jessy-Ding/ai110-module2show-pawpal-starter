@@ -102,7 +102,7 @@ Then open the local URL shown in the terminal (usually http://localhost:8501).
 
 ## 📸 Demo
 
-<a href="/course_images/ai110/pawpal_demo.png" target="_blank"><img src='/course_images/ai110/pawpal_demo.png' title='PawPal App' width='' alt='PawPal App' class='center-block' /></a>
+<a href="/pawpal_demo.png" target="_blank"><img src='/pawpal_demo.png' title='PawPal App' width='' alt='PawPal App' class='center-block' /></a>
 
 ## Testing
 
