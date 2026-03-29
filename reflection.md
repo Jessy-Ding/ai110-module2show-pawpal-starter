@@ -7,108 +7,108 @@
 - Briefly describe your initial UML design.
 - What classes did you include, and what responsibilities did you assign to each?
 
-Answer: My initial UML design followed a simple model-service-UI structure so I could map directly from requirements to implementation. The goal was to keep data entities clean, isolate scheduling logic, and make the Streamlit page act as a thin interaction layer.
+Answer: For this phase, I designed a requirement-first UML that a teacher can quickly map to the assignment rubric: clear data models, one scheduling service, one controller, and a thin Streamlit UI in `app.py`. The design intentionally avoids over-engineering while still supporting constraints, prioritization, and plan explanation.
 
-I split responsibilities across these core classes:
+I used these classes and responsibilities:
 
 1. `Owner`
-- Stores owner profile and planning preferences (for example available time and preferred task types).
+- Stores owner identity and planning preferences.
 
 2. `Pet`
-- Stores pet identity and care-related context (name, species, notes).
+- Stores pet profile used by scheduling logic.
 
-3. `Task`
-- Represents one care activity with fields like title/type, duration, priority, optional time window, and completion state.
+3. `CareTask`
+- Represents each care activity (title, type, duration, priority, optional preferred window).
 
-4. `ScheduleItem`
-- Represents a scheduled result (task + start/end time + explanation for why it was selected).
+4. `PlanningConstraints`
+- Captures daily limits and user choices (available minutes and optional start time).
 
-5. `SchedulePlan`
-- Holds the final daily plan as an ordered list of `ScheduleItem` objects and summary metadata (used time, skipped tasks).
+5. `ScheduleEntry`
+- Represents one scheduled task with start/end and a short reason.
 
-6. `Scheduler`
-- Core decision engine. Selects and orders tasks using constraints (time budget, priority, preferences, and optional time windows).
+6. `DailyPlan`
+- Contains ordered schedule entries and summary fields (used minutes, skipped tasks).
 
-7. `PawPalController`
-- Application coordinator between UI and model/service classes. Receives user inputs, constructs model objects, calls `Scheduler`, and returns a display-ready plan.
+7. `SchedulerService`
+- Core algorithm unit that filters tasks by constraints, ranks by priority, and builds `DailyPlan`.
 
-8. `StreamlitApp` (implemented in `app.py`)
-- Collects owner/pet/task inputs in Streamlit, triggers schedule generation, and renders current tasks plus final plan output.
+8. `PawPalController`
+- Orchestrates app flow: validates UI input, builds domain objects, calls scheduler, returns output.
 
-Initial UML (draft):
+9. `StreamlitApp_app_py`
+- The actual UI boundary in `app.py`: collects form inputs, triggers controller actions, displays tasks and plan.
+
+Initial UML (phase-appropriate draft):
 
 ```mermaid
 classDiagram
-	class Owner {
-		+name: str
-		+preferences: dict
-		+available_minutes: int
-	}
+    class Owner {
+        +name: str
+        +preferences: dict
+    }
 
-	class Pet {
-		+name: str
-		+species: str
-		+care_notes: str
-	}
+    class Pet {
+        +name: str
+        +species: str
+        +notes: str
+    }
 
-	class Task {
-		+title: str
-		+category: str
-		+duration_minutes: int
-		+priority: str
-		+time_window: str
-		+is_completed: bool
-	}
+    class CareTask {
+        +title: str
+        +task_type: str
+        +duration_minutes: int
+        +priority: str
+        +preferred_window: str
+    }
 
-	class ScheduleItem {
-		+start_time: str
-		+end_time: str
-		+reason: str
-	}
+    class PlanningConstraints {
+        +available_minutes: int
+        +day_start: str
+    }
 
-	class SchedulePlan {
-		+date: str
-		+items: list
-		+used_minutes: int
-		+skipped_tasks: list
-	}
+    class ScheduleEntry {
+        +start_time: str
+        +end_time: str
+        +reason: str
+    }
 
-	class Scheduler {
-		+generate_plan(owner, pet, tasks): SchedulePlan
-		+score_task(task, owner, pet): int
-		+fits_constraints(task, remaining_minutes): bool
-	}
+    class DailyPlan {
+        +entries: list
+        +used_minutes: int
+        +skipped_tasks: list
+    }
 
-	class PawPalController {
-		+create_owner(data): Owner
-		+create_pet(data): Pet
-		+add_task(data): Task
-		+build_schedule(owner, pet, tasks): SchedulePlan
-	}
+    class SchedulerService {
+        +generate_plan(owner, pet, tasks, constraints): DailyPlan
+        +score_task(task, owner, pet): int
+        +fits_constraints(task, remaining_minutes): bool
+    }
 
-	class StreamlitApp_app_py {
-		+collect_owner_pet_inputs()
-		+add_task_ui()
-		+generate_schedule_ui()
-		+render_tasks(tasks)
-		+render_schedule(plan)
-	}
+    class PawPalController {
+        +add_task(task_data): CareTask
+        +build_plan(owner_data, pet_data, tasks, constraints_data): DailyPlan
+    }
 
-	Owner "1" --> "1..*" Pet : owns
-	Owner "1" --> "0..*" Task : requests
-	Pet "1" --> "0..*" Task : needs
-	Scheduler ..> Task : ranks/selects
-	Scheduler ..> Owner : uses preferences
-	Scheduler ..> Pet : uses care context
-	Scheduler --> SchedulePlan : produces
-	SchedulePlan *-- "1..*" ScheduleItem : contains
-	ScheduleItem --> Task : schedules
-	PawPalController --> Scheduler : calls
-	PawPalController --> Owner : creates/updates
-	PawPalController --> Pet : creates/updates
-	PawPalController --> Task : creates/updates
-	StreamlitApp_app_py --> PawPalController : sends input
-	StreamlitApp_app_py --> SchedulePlan : renders
+    class StreamlitApp_app_py {
+        +collect_inputs()
+        +on_add_task()
+        +on_generate_schedule()
+        +render_task_table(tasks)
+        +render_plan(plan)
+    }
+
+    Owner "1" --> "1..*" Pet : owns
+    Pet "1" --> "0..*" CareTask : requires
+    SchedulerService ..> Owner : reads preferences
+    SchedulerService ..> Pet : reads profile
+    SchedulerService ..> CareTask : evaluates
+    SchedulerService ..> PlanningConstraints : applies
+    SchedulerService --> DailyPlan : produces
+    DailyPlan *-- "1..*" ScheduleEntry : contains
+    ScheduleEntry --> CareTask : schedules
+    PawPalController --> SchedulerService : calls
+    StreamlitApp_app_py --> PawPalController : sends input
+    StreamlitApp_app_py --> DailyPlan : renders output
 ```
 
 **b. Design changes**
