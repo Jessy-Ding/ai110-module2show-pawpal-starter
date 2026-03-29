@@ -31,8 +31,8 @@ I split responsibilities across these core classes:
 7. `PawPalController`
 - Application coordinator between UI and model/service classes. Receives user inputs, constructs model objects, calls `Scheduler`, and returns a display-ready plan.
 
-8. `StreamlitView` (represented by `app.py`)
-- Collects inputs and renders results, while keeping business logic outside the UI layer.
+8. `StreamlitApp` (implemented in `app.py`)
+- Collects owner/pet/task inputs in Streamlit, triggers schedule generation, and renders current tasks plus final plan output.
 
 Initial UML (draft):
 
@@ -85,10 +85,12 @@ classDiagram
 		+build_schedule(owner, pet, tasks): SchedulePlan
 	}
 
-	class StreamlitView {
-		+collect_inputs()
-		+show_tasks(tasks)
-		+show_schedule(plan)
+	class StreamlitApp_app_py {
+		+collect_owner_pet_inputs()
+		+add_task_ui()
+		+generate_schedule_ui()
+		+render_tasks(tasks)
+		+render_schedule(plan)
 	}
 
 	Owner "1" --> "1..*" Pet : owns
@@ -104,8 +106,8 @@ classDiagram
 	PawPalController --> Owner : creates/updates
 	PawPalController --> Pet : creates/updates
 	PawPalController --> Task : creates/updates
-	StreamlitView --> PawPalController : sends input
-	StreamlitView --> SchedulePlan : renders
+	StreamlitApp_app_py --> PawPalController : sends input
+	StreamlitApp_app_py --> SchedulePlan : renders
 ```
 
 - What classes did you include, and what responsibilities did you assign to each?
