@@ -9,15 +9,18 @@ class Owner:
 	pets: List["Pet"] = field(default_factory=list)
 
 	def add_pet(self, pet: "Pet") -> None:
+		"""Add a pet to this owner's managed pet list."""
 		self.pets.append(pet)
 
 	def get_pet(self, pet_name: str) -> Optional["Pet"]:
+		"""Return the pet with the given name, or None if not found."""
 		for pet in self.pets:
 			if pet.name == pet_name:
 				return pet
 		return None
 
 	def get_all_tasks(self, include_completed: bool = True) -> List["Task"]:
+		"""Collect tasks from all pets, optionally excluding completed tasks."""
 		all_tasks: List[Task] = []
 		for pet in self.pets:
 			if include_completed:
@@ -35,14 +38,17 @@ class Pet:
 	tasks: List["Task"] = field(default_factory=list)
 
 	def add_task(self, task: "Task") -> None:
+		"""Attach a task to this pet and set task.pet_name when missing."""
 		if task.pet_name is None:
 			task.pet_name = self.name
 		self.tasks.append(task)
 
 	def get_pending_tasks(self) -> List["Task"]:
+		"""Return only tasks that are not yet completed."""
 		return [task for task in self.tasks if not task.is_completed]
 
 	def remove_task(self, description: str) -> bool:
+		"""Remove the first task matching description and report success."""
 		for i, task in enumerate(self.tasks):
 			if task.description == description:
 				del self.tasks[i]
@@ -63,12 +69,15 @@ class Task:
 
 	@property
 	def title(self) -> str:
+		"""Expose description as a title-style alias for compatibility."""
 		return self.description
 
 	def mark_complete(self) -> None:
+		"""Mark this task as completed."""
 		self.is_completed = True
 
 	def mark_incomplete(self) -> None:
+		"""Mark this task as not completed."""
 		self.is_completed = False
 
 
@@ -101,9 +110,11 @@ class Scheduler:
 	}
 
 	def retrieve_all_tasks(self, owner: Owner, include_completed: bool = False) -> List[Task]:
+		"""Fetch all tasks across an owner's pets."""
 		return owner.get_all_tasks(include_completed=include_completed)
 
 	def organize_tasks(self, tasks: List[Task]) -> List[Task]:
+		"""Sort tasks by priority, then duration, then description."""
 		return sorted(
 			tasks,
 			key=lambda task: (
@@ -119,6 +130,7 @@ class Scheduler:
 		available_minutes: int,
 		include_completed: bool = False,
 	) -> List[Task]:
+		"""Select the best-fitting tasks for the available daily time budget."""
 		remaining = available_minutes
 		selected: List[Task] = []
 		for task in self.organize_tasks(self.retrieve_all_tasks(owner, include_completed=include_completed)):
@@ -131,6 +143,7 @@ class Scheduler:
 class SchedulerService(Scheduler):
 	@staticmethod
 	def _add_minutes(time_str: str, minutes: int) -> str:
+		"""Return HH:MM after adding minutes to a starting HH:MM time."""
 		hour_str, minute_str = time_str.split(":")
 		total_minutes = int(hour_str) * 60 + int(minute_str) + minutes
 		total_minutes %= 24 * 60
@@ -145,6 +158,7 @@ class SchedulerService(Scheduler):
 		tasks: List[Task],
 		constraints: PlanningConstraints,
 	) -> DailyPlan:
+		"""Build a time-ordered daily plan from candidate tasks and constraints."""
 		candidate_tasks = tasks if tasks else pet.get_pending_tasks()
 		ordered = self.organize_tasks(
 			[task for task in candidate_tasks if self.fits_constraints(task, constraints.available_minutes)]
@@ -182,6 +196,7 @@ class SchedulerService(Scheduler):
 		return DailyPlan(entries=entries, used_minutes=used_minutes, skipped_tasks=skipped)
 
 	def score_task(self, task: Task, owner: Owner, pet: Pet) -> int:
+		"""Compute a numeric task score from priority and owner/pet relevance."""
 		score = self.PRIORITY_SCORE.get(task.priority.lower(), 0)
 		preferred_types = owner.preferences.get("preferred_task_types", [])
 		if isinstance(preferred_types, list) and task.task_type in preferred_types:
@@ -191,14 +206,17 @@ class SchedulerService(Scheduler):
 		return score
 
 	def fits_constraints(self, task: Task, remaining_minutes: int) -> bool:
+		"""Check whether a task fits in the remaining minute budget."""
 		return task.duration_minutes <= remaining_minutes
 
 
 class PawPalController:
 	def __init__(self, scheduler: Optional[SchedulerService] = None) -> None:
+		"""Initialize controller with an injectable scheduler service."""
 		self.scheduler = scheduler or SchedulerService()
 
 	def add_task(self, task_data: Dict[str, Any]) -> Task:
+		"""Validate input task data and convert it into a Task object."""
 		description = str(task_data.get("description", task_data.get("title", ""))).strip()
 		if not description:
 			raise ValueError("Task description/title is required.")
@@ -225,6 +243,7 @@ class PawPalController:
 		tasks_data: List[Dict[str, Any]],
 		constraints_data: Dict[str, Any],
 	) -> DailyPlan:
+		"""Construct domain objects from input payloads and generate a daily plan."""
 		owner = Owner(
 			name=str(owner_data.get("name", "Owner")),
 			preferences=dict(owner_data.get("preferences", {})),
